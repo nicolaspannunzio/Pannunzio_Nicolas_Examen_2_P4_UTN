@@ -1,0 +1,240 @@
+# Requiere la extensión "REST Client" de VS Code.
+# Ejecutar de arriba hacia abajo sobre una base recién creada (las unidades
+# 1=kg y 6=doc salen del seed). Los ids se capturan con "# @name", así no
+# dependen del estado de la base.
+
+@baseUrl = http://127.0.0.1:8000/api/v1
+
+### ============================ UNIDADES ============================
+### 1. Catálogo de unidades de medida -> 200 (6 unidades del seed)
+GET {{baseUrl}}/unidades-medida
+
+
+### ============================ POST ============================
+### 2. Crear producto por peso (kg) -> 201 (incluye unidad anidada y hay_stock)
+# @name milanesa
+POST {{baseUrl}}/productos
+Content-Type: application/json
+
+{
+  "nombre": "Milanesa de Ternera",
+  "descripcion": "Rebozado crocante artesanal",
+  "precio_base": 12500.50,
+  "stock_cantidad": 15.5,
+  "disponible": true,
+  "unidad_venta_id": 1
+}
+
+### 3. Crear producto contable (docena) con stock entero -> 201
+# @name empanadas
+POST {{baseUrl}}/productos
+Content-Type: application/json
+
+{
+  "nombre": "Empanadas Criollas",
+  "descripcion": "Carne cortada a cuchillo",
+  "precio_base": 14000,
+  "stock_cantidad": 5,
+  "disponible": true,
+  "unidad_venta_id": 6
+}
+
+### 4. Crear sin stock_cantidad (default 0 -> hay_stock = false) -> 201
+# @name sinStock
+POST {{baseUrl}}/productos
+Content-Type: application/json
+
+{
+  "nombre": "Flan Casero",
+  "precio_base": 3200,
+  "unidad_venta_id": 5
+}
+
+### Variables con los ids creados arriba
+@milanesaId = {{milanesa.response.body.id}}
+@empanadasId = {{empanadas.response.body.id}}
+
+
+### ============================ ERRORES POST ============================
+### 5. 422 - nombre de menos de 3 caracteres
+POST {{baseUrl}}/productos
+Content-Type: application/json
+
+{ "nombre": "Te", "precio_base": 1500, "stock_cantidad": 10, "unidad_venta_id": 1 }
+
+### 6. 422 - precio negativo
+POST {{baseUrl}}/productos
+Content-Type: application/json
+
+{ "nombre": "Precio Negativo", "precio_base": -1, "stock_cantidad": 1, "unidad_venta_id": 1 }
+
+### 7. 422 - STOCK NEGATIVO
+POST {{baseUrl}}/productos
+Content-Type: application/json
+
+{ "nombre": "Stock Negativo", "precio_base": 100, "stock_cantidad": -5, "unidad_venta_id": 1 }
+
+### 8. 422 - sin unidad de venta
+POST {{baseUrl}}/productos
+Content-Type: application/json
+
+{ "nombre": "Sin Unidad", "precio_base": 100, "stock_cantidad": 1 }
+
+### 9. 422 - STOCK CON DECIMALES sobre unidad contable (RN-10)
+POST {{baseUrl}}/productos
+Content-Type: application/json
+
+{ "nombre": "Sandwich de Miga", "precio_base": 2000, "stock_cantidad": 2.5, "unidad_venta_id": 5 }
+
+### 10. 404 - unidad de venta inexistente (RN-03)
+POST {{baseUrl}}/productos
+Content-Type: application/json
+
+{ "nombre": "Unidad Fantasma", "precio_base": 100, "stock_cantidad": 1, "unidad_venta_id": 999 }
+
+### 11. 409 - nombre repetido entre activos (RN-02)
+POST {{baseUrl}}/productos
+Content-Type: application/json
+
+{ "nombre": "Milanesa de Ternera", "precio_base": 13000, "stock_cantidad": 5, "unidad_venta_id": 1 }
+
+
+### ============================ GET ============================
+### 12. Listado paginado (solo activos por defecto) -> 200
+GET {{baseUrl}}/productos?skip=0&limit=10
+
+### 13. Paginación: segunda página de 1 elemento
+GET {{baseUrl}}/productos?skip=1&limit=1
+
+### 14. 422 - limit fuera de rango (máx. 50)
+GET {{baseUrl}}/productos?limit=51
+
+### 15. Filtro search (parcial, sin distinguir mayúsculas)
+GET {{baseUrl}}/productos?search=MILA
+
+### 16. Filtro disponible=true
+GET {{baseUrl}}/productos?disponible=true
+
+### 17. Filtro activo=false (anulados; vacío hasta ejecutar el DELETE más abajo)
+GET {{baseUrl}}/productos?activo=false
+
+### 18. Filtro categoria_id (se demuestra con datos en relaciones.http)
+GET {{baseUrl}}/productos?categoria_id=1
+
+### 19. Detalle -> 200 (stock_cantidad 15.5, hay_stock = true)
+GET {{baseUrl}}/productos/{{milanesaId}}
+
+### 20. 404 - detalle de un id inexistente
+GET {{baseUrl}}/productos/9999
+
+
+### ============================ PUT ============================
+### 21. Actualizar -> 200
+PUT {{baseUrl}}/productos/{{milanesaId}}
+Content-Type: application/json
+
+{
+  "nombre": "Milanesa de Ternera",
+  "descripcion": "Rebozado crocante artesanal",
+  "precio_base": 13000,
+  "stock_cantidad": 15.5,
+  "disponible": true,
+  "unidad_venta_id": 1
+}
+
+### 22. hay_stock ANTES de llevar el stock a 0 -> true
+GET {{baseUrl}}/productos/{{milanesaId}}
+
+### 23. Llevar el stock a 0 -> 200 (hay_stock pasa a false)
+PUT {{baseUrl}}/productos/{{milanesaId}}
+Content-Type: application/json
+
+{
+  "nombre": "Milanesa de Ternera",
+  "descripcion": "Rebozado crocante artesanal",
+  "precio_base": 13000,
+  "stock_cantidad": 0,
+  "disponible": true,
+  "unidad_venta_id": 1
+}
+
+### 24. hay_stock DESPUÉS de llevar el stock a 0 -> false
+GET {{baseUrl}}/productos/{{milanesaId}}
+
+### 25. Pausar la venta (disponible=false) -> 200, activo sigue true (RN-12)
+PUT {{baseUrl}}/productos/{{milanesaId}}
+Content-Type: application/json
+
+{
+  "nombre": "Milanesa de Ternera",
+  "descripcion": "Rebozado crocante artesanal",
+  "precio_base": 13000,
+  "stock_cantidad": 0,
+  "disponible": false,
+  "unidad_venta_id": 1
+}
+
+### 26. Filtro disponible=false -> solo el pausado
+GET {{baseUrl}}/productos?disponible=false
+
+### 27. 409 - PUT con nombre de otro producto activo (RN-02)
+PUT {{baseUrl}}/productos/{{milanesaId}}
+Content-Type: application/json
+
+{ "nombre": "Empanadas Criollas", "precio_base": 13000, "stock_cantidad": 0, "disponible": false, "unidad_venta_id": 1 }
+
+### 28. 422 - PUT con stock decimal sobre unidad contable (RN-10)
+PUT {{baseUrl}}/productos/{{empanadasId}}
+Content-Type: application/json
+
+{ "nombre": "Empanadas Criollas", "precio_base": 14000, "stock_cantidad": 1.5, "disponible": true, "unidad_venta_id": 6 }
+
+### 29. 422 - PUT que cambia a unidad contable con stock decimal (RN-10)
+PUT {{baseUrl}}/productos/{{milanesaId}}
+Content-Type: application/json
+
+{ "nombre": "Milanesa de Ternera", "precio_base": 13000, "stock_cantidad": 2.5, "disponible": false, "unidad_venta_id": 5 }
+
+### 30. 422 - PUT con stock negativo
+PUT {{baseUrl}}/productos/{{milanesaId}}
+Content-Type: application/json
+
+{ "nombre": "Milanesa de Ternera", "precio_base": 13000, "stock_cantidad": -1, "disponible": false, "unidad_venta_id": 1 }
+
+### 31. 404 - PUT sobre id inexistente
+PUT {{baseUrl}}/productos/9999
+Content-Type: application/json
+
+{ "nombre": "No Existe", "precio_base": 1, "stock_cantidad": 0, "unidad_venta_id": 1 }
+
+
+### ============================ DELETE ============================
+### 32. Anulación lógica -> 204
+DELETE {{baseUrl}}/productos/{{milanesaId}}
+
+### 33. El producto sigue consultable por id: activo=false, anulado_at con fecha, disponible intacto
+GET {{baseUrl}}/productos/{{milanesaId}}
+
+### 34. Ya no aparece en el listado por defecto
+GET {{baseUrl}}/productos
+
+### 35. Aparece con activo=false
+GET {{baseUrl}}/productos?activo=false
+
+### 36. 409 - anular un producto ya anulado (RN-04)
+DELETE {{baseUrl}}/productos/{{milanesaId}}
+
+### 37. 409 - PUT sobre producto anulado (RN-05)
+PUT {{baseUrl}}/productos/{{milanesaId}}
+Content-Type: application/json
+
+{ "nombre": "Milanesa Modificada", "precio_base": 14000, "stock_cantidad": 10, "disponible": true, "unidad_venta_id": 1 }
+
+### 38. 404 - anular un id inexistente
+DELETE {{baseUrl}}/productos/9999
+
+### 39. El nombre de un producto anulado queda libre (RN-02) -> 201
+POST {{baseUrl}}/productos
+Content-Type: application/json
+
+{ "nombre": "Milanesa de Ternera", "precio_base": 13000, "stock_cantidad": 8, "unidad_venta_id": 1 }

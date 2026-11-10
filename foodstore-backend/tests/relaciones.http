@@ -1,0 +1,177 @@
+# Requiere la extensión "REST Client" de VS Code.
+# Ejecutar de arriba hacia abajo sobre una base recién creada.
+# Los ids se capturan con "# @name": no dependen del estado de la base.
+
+@baseUrl = http://127.0.0.1:8000/api/v1
+
+### ============================ CATEGORÍAS ============================
+### 1. Alta de categoría -> 201
+# @name catPlatos
+POST {{baseUrl}}/categorias
+Content-Type: application/json
+
+{ "nombre": "Platos Principales", "descripcion": "Comidas elaboradas calientes" }
+
+### 2. Alta de segunda categoría -> 201
+# @name catRoti
+POST {{baseUrl}}/categorias
+Content-Type: application/json
+
+{ "nombre": "Rotisería", "descripcion": "Comidas listas para llevar" }
+
+### 3. Alta de tercera categoría (para probar el listado) -> 201
+# @name catPostres
+POST {{baseUrl}}/categorias
+Content-Type: application/json
+
+{ "nombre": "Postres" }
+
+### Variables con los ids creados arriba
+@catPlatosId = {{catPlatos.response.body.id}}
+@catRotiId = {{catRoti.response.body.id}}
+
+### 4. 409 - nombre de categoría repetido entre activas (RN-02)
+POST {{baseUrl}}/categorias
+Content-Type: application/json
+
+{ "nombre": "Platos Principales" }
+
+### 5. 422 - nombre de menos de 3 caracteres
+POST {{baseUrl}}/categorias
+Content-Type: application/json
+
+{ "nombre": "ab" }
+
+### 6. Listar categorías (activas) con filtro search
+GET {{baseUrl}}/categorias?search=rotis
+
+### 7. Detalle de categoría -> 200
+GET {{baseUrl}}/categorias/{{catPlatosId}}
+
+### 8. Actualizar categoría -> 200
+PUT {{baseUrl}}/categorias/{{catPlatosId}}
+Content-Type: application/json
+
+{ "nombre": "Platos Principales", "descripcion": "Comidas calientes elaboradas" }
+
+### 9. 409 - PUT con el nombre de otra categoría activa
+PUT {{baseUrl}}/categorias/{{catPlatosId}}
+Content-Type: application/json
+
+{ "nombre": "Rotisería" }
+
+### 10. 404 - categoría inexistente
+GET {{baseUrl}}/categorias/9999
+
+
+### ============================ PRODUCTOS DE PRUEBA ============================
+### 11. Producto para clasificar -> 201
+# @name prodMila
+POST {{baseUrl}}/productos
+Content-Type: application/json
+
+{ "nombre": "Milanesa Napolitana", "precio_base": 9800, "stock_cantidad": 4.5, "unidad_venta_id": 1 }
+
+### 12. Segundo producto (quedará sin clasificar) -> 201
+# @name prodFlan
+POST {{baseUrl}}/productos
+Content-Type: application/json
+
+{ "nombre": "Flan con Dulce de Leche", "precio_base": 3200, "stock_cantidad": 6, "unidad_venta_id": 5 }
+
+### Variables con los ids creados arriba
+@prodMilaId = {{prodMila.response.body.id}}
+@prodFlanId = {{prodFlan.response.body.id}}
+
+
+### ============================ CLASIFICACIÓN N:N ============================
+### 13. Clasificar en "Platos Principales" como principal -> 201
+POST {{baseUrl}}/productos/{{prodMilaId}}/categorias
+Content-Type: application/json
+
+{ "categoria_id": {{catPlatosId}}, "es_principal": true }
+
+### 14. Clasificar en "Rotisería" y pasarla a principal (RN-09) -> 201
+POST {{baseUrl}}/productos/{{prodMilaId}}/categorias
+Content-Type: application/json
+
+{ "categoria_id": {{catRotiId}}, "es_principal": true }
+
+### 15. Verificar: Platos ahora es_principal=false, Rotisería es_principal=true
+GET {{baseUrl}}/productos/{{prodMilaId}}/categorias
+
+### 16. El detalle del producto muestra sus categorías
+GET {{baseUrl}}/productos/{{prodMilaId}}
+
+### 17. 409 - clasificar dos veces en la misma categoría (RN-07)
+POST {{baseUrl}}/productos/{{prodMilaId}}/categorias
+Content-Type: application/json
+
+{ "categoria_id": {{catRotiId}}, "es_principal": false }
+
+### 18. 404 - categoria_id inexistente (RN-03)
+POST {{baseUrl}}/productos/{{prodMilaId}}/categorias
+Content-Type: application/json
+
+{ "categoria_id": 9999 }
+
+### 19. 404 - producto inexistente
+POST {{baseUrl}}/productos/9999/categorias
+Content-Type: application/json
+
+{ "categoria_id": {{catRotiId}} }
+
+
+### ============================ FILTRO categoria_id ============================
+### 20. Productos de "Rotisería": solo la milanesa
+GET {{baseUrl}}/productos?categoria_id={{catRotiId}}
+
+### 21. Clasificar el flan también en "Rotisería" -> 201
+POST {{baseUrl}}/productos/{{prodFlanId}}/categorias
+Content-Type: application/json
+
+{ "categoria_id": {{catRotiId}} }
+
+### 22. Ahora son dos, sin filas duplicadas aunque la milanesa tenga 2 categorías
+GET {{baseUrl}}/productos?categoria_id={{catRotiId}}
+
+
+### ============================ ANULAR CATEGORÍA (RN-06) ============================
+### 23. Anular "Platos Principales" -> 204
+DELETE {{baseUrl}}/categorias/{{catPlatosId}}
+
+### 24. 409 - anular una categoría ya anulada (RN-04)
+DELETE {{baseUrl}}/categorias/{{catPlatosId}}
+
+### 25. 409 - PUT sobre categoría anulada (RN-05)
+PUT {{baseUrl}}/categorias/{{catPlatosId}}
+Content-Type: application/json
+
+{ "nombre": "Nombre Nuevo" }
+
+### 26. La categoría anulada aparece solo con activo=false
+GET {{baseUrl}}/categorias?activo=false
+
+### 27. Los productos siguen activos e intactos (activo=true)
+GET {{baseUrl}}/productos/{{prodMilaId}}
+
+### 28. 409 - clasificar en una categoría anulada (RN-08)
+POST {{baseUrl}}/productos/{{prodFlanId}}/categorias
+Content-Type: application/json
+
+{ "categoria_id": {{catPlatosId}} }
+
+### 29. El nombre de la categoría anulada queda libre (RN-02) -> 201
+POST {{baseUrl}}/categorias
+Content-Type: application/json
+
+{ "nombre": "Platos Principales" }
+
+### 30. Anular el flan -> 204
+DELETE {{baseUrl}}/productos/{{prodFlanId}}
+
+### 31. 409 - clasificar un producto anulado (RN-08)
+POST {{baseUrl}}/productos/{{prodFlanId}}/categorias
+Content-Type: application/json
+
+{ "categoria_id": {{catRotiId}} }

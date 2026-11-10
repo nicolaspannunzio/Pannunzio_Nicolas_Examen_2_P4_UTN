@@ -1,0 +1,32 @@
+# ---- Secretos / configuración local ----
+.env
+.env.*
+!.env.example
+
+# ---- Python ----
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# ---- Node / Vite ----
+node_modules/
+dist/
+dist-ssr/
+*.tsbuildinfo
+*.local
+npm-debug.log*
+
+# ---- Editor / sistema operativo ----
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+Thumbs.db
+
+# ---- Logs ----
+*.log
+logs/
